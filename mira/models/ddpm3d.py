@@ -321,19 +321,11 @@ class MiraDDPM(DDPM):
         else:
             model = instantiate_from_config(config)
 
-        if self.training and self.rec_loss:
-            self.first_stage_model = model.eval()
-            self.first_stage_model.decoder = model.decoder.train()
-            for n, param in self.first_stage_model.named_parameters():
-                if n in self.first_stage_model.decoder.named_parameters():
-                    param.requires_grad = True
-                else:
-                    param.requires_grad = False
-        else:
-            self.first_stage_model = model.eval()
-            self.first_stage_model.train = disabled_train
-            for param in self.first_stage_model.parameters():
-                param.requires_grad = False
+
+        self.first_stage_model = model.eval()
+        self.first_stage_model.train = disabled_train
+        for param in self.first_stage_model.parameters():
+            param.requires_grad = False
 
         sd_ckpt = getattr(config, 'pretrain', None)
         if sd_ckpt:
@@ -555,7 +547,7 @@ class MiraDDPM(DDPM):
 
         ## optional output: self-reconst or caption
         if return_first_stage_outputs:
-            xrec = self.decode_first_stage_3DVAE_diff(z) if self.rec_loss else self.decode_first_stage_2DAE(z)
+            xrec =  self.decode_first_stage_2DAE(z)
             out.extend([x_ori, xrec])
         if return_original_cond:
             out.append(cond)
@@ -604,7 +596,6 @@ class MiraDDPM(DDPM):
                                video_to_image=self.video_to_image, inter_num_timesteps=inter_num_timesteps, **kwargs)
         if self.rec_loss:
             rec_loss = self.get_loss(xori, xrec)
-            loss = loss + rec_loss * self.rec_loss
             loss_dict.update({f'trian/rec_loss': rec_loss.mean()})
         return loss, loss_dict
 
@@ -1205,10 +1196,9 @@ class MiraDDPM(DDPM):
         # else:
         #     optimizer = torch.optim.AdamW(params, lr=lr)
 
+
         optimizer = torch.optim.AdamW(params, lr=lr)
-        if self.rec_loss:
-            params += list(self.first_stage_model.decoder.parameters())
-            mainlogger.info(f"@Training [{len(params)}] Full Paramters + VAE Decoder.")
+
 
         ## lr scheduler
         if self.use_scheduler:
