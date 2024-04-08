@@ -26,12 +26,18 @@ The Mira project is our endeavor to investigate and refine the entire data-model
 
 **2 x 10s 384×240**
 
-[![384×240 Mira-v0](https://img.youtube.com/vi/EtCtrxSgUW0/0.jpg)](https://www.youtube.com/watch?v=EtCtrxSgUW0)
+
+
+https://github.com/mira-space/Mira/assets/13939478/d6bfb84c-a966-4537-9826-131b6ac34f4e
+
+
 
 **2 x 20s 128×80**   
 
-[![128x80 Mira-v0](https://img.youtube.com/vi/Ywq4MQxoXHs/0.jpg)](https://www.youtube.com/watch?v=Ywq4MQxoXHs)
 
+
+
+https://github.com/mira-space/Mira/assets/13939478/9f274503-9715-4d2a-a262-10113c4df78f
 
 
 
