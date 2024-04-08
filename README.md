@@ -24,7 +24,7 @@ The Mira project is our endeavor to investigate and refine the entire data-model
 
 ## Results
 
-**2 x 10s 384×240**
+**10s 384×240**
 
 
 
@@ -32,7 +32,7 @@ https://github.com/mira-space/Mira/assets/13939478/d6bfb84c-a966-4537-9826-131b6
 
 
 
-**2 x 20s 128×80**   
+**20s 128×80**   
 
 
 
