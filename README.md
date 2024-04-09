@@ -28,7 +28,10 @@ The Mira project is our endeavor to investigate and refine the entire data-model
 
 
 
-https://github.com/mira-space/Mira/assets/13939478/d6bfb84c-a966-4537-9826-131b6ac34f4e
+
+
+https://github.com/mira-space/Mira/assets/13939478/4de6aade-4eca-4291-bcc6-950c7b44c981
+
 
 
 
