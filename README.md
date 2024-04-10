@@ -6,15 +6,14 @@
 #  Mira: A Preliminary Journey into Mini-Sora
 
 
-> [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan]()<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao]()<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1+</sup>,  [Chun Yuan](), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
-> <sup>1</sup>ARC Lab, Tencent PCG <sup>*</sup>Equal contribution  <sup>+</sup>Project lead
+> [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan]()<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao]()<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1#</sup>,  [Chun Yuan](), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
+> <sup>1</sup>ARC Lab, Tencent PCG <sup>*</sup>Equal contribution  <sup>#</sup>Project lead
 
 
-<p align="center">
-  <a href="https://mira-space.github.io">🌐Project Page</a> |
-  <a href="https://github.com/mira-space/MiraData">🗄️MiraData</a> |
-  <a href="">📹Demo Video</a> |
-</p>
+    
+[![Project Page](https://img.shields.io/badge/Project-Website-green)](https://mira-space.github.io/)
+[![MiraData Page](https://img.shields.io/badge/MiraData-Page-blue)](https://github.com/mira-space/MiraData)
+
 
 We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, long-duration video generation in the style of Sora. Sora stands out from existing text-to-video (T2V) generation frameworks in several key ways:
 
