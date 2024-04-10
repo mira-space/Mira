@@ -5,6 +5,17 @@
 
 #  Mira: A Preliminary Journey into Mini-Sora
 
+
+> [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan]()<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao]()<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1+</sup>,  [Chun Yuan](), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
+> <sup>1</sup>ARC Lab, Tencent PCG <sup>*</sup>Equal contribution  <sup>+</sup>Project lead
+
+
+<p align="center">
+  <a href="https://mira-space.github.io">🌐Project Page</a> |
+  <a href="https://github.com/mira-space/MiraData">🗄️MiraData</a> |
+  <a href="">📹Demo Video</a> |
+</p>
+
 We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, long-duration video generation in the style of Sora. Sora stands out from existing text-to-video (T2V) generation frameworks in several key ways:
 
 * Extended sequence length: While most frameworks are limited to generating short videos (2 seconds / 16 frames), Sora is designed to produce significantly longer sequences, potentially lasting 10 seconds, 20 seconds, or more.
@@ -20,6 +31,9 @@ We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, 
 
 
 The Mira project is our endeavor to investigate and refine the entire data-model-training pipeline for Sora-like, lightweight T2V frameworks, and to preliminarily demonstrate the aforementioned Sora characteristics. Our goal is to foster innovation and democratize the field of content creation, paving the way for more accessible and advanced video generation tools.
+
+
+
 
 
 ## Results
