@@ -6,7 +6,7 @@
 #  Mira: A Preliminary Journey into Mini-Sora
 
 
-> [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan]()<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao](https://scholar.google.com/citations?user=uRCc-McAAAAJ&hl=zh-TW)<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1#</sup>,  [Chun Yuan](), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
+> [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan](https://github.com/jiangyzy)<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao](https://scholar.google.com/citations?user=uRCc-McAAAAJ&hl=zh-TW)<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1#</sup>,  [Chun Yuan](https://scholar.google.com/citations?hl=en&user=fYdxi2sAAAAJ), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
 > <sup>1</sup>ARC Lab, Tencent PCG <sup>*</sup>Equal contribution  <sup>#</sup>Project lead
 
 
