@@ -45,7 +45,7 @@ The Mira project is our endeavor to investigate and refine the entire data-model
 
 https://github.com/mira-space/Mira/assets/13939478/4de6aade-4eca-4291-bcc6-950c7b44c981
 
-
+Each individual video can be downloaded from [here](https://drive.google.com/drive/folders/1-GdDOQ3r0_FimMsH-uQaQgOYzrxXaEa8?usp=drive_link).
 
 
 **20s 128×80**   
