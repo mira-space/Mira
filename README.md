@@ -69,6 +69,10 @@ https://github.com/mira-space/Mira/assets/13939478/9f274503-9715-4d2a-a262-10113
 **[2024.04.01]** 🔥 We're delighted to announce the release of **Mira** and **MiraData-v0**. This  release offers a comprehensive open-source suite for data annotation and training pipelines, specifically tailored for the creation of long-duration videos with dynamic content and consistent quality. Our provided codes and checkpoints empower users to generate videos up to 20 seconds in 128x80 resolution and 10 seconds in 384x240 resolution. Dive into the future of video generation with Mira!
 
 
+
+
+
+
 ## Installation
 ```bash
 ## create a conda enviroment
@@ -88,6 +92,15 @@ torchvision tqdm==4.65.0 transformers==4.25.1 moviepy av  tensorboardx \
 ```
 
 ## Training
+
+### Checkpoints
+
+| Name | Model Size | Data | Resolution |   
+| ---- | ---- | ---- | ---- |
+| [128-v0.pt](https://huggingface.co/TencentARC/Mira-v0) | 1.1B | Webvid(pretrain) + MiraData-v0 | 128x80, 120 frames |
+| [384-v0.pt](https://huggingface.co/TencentARC/Mira-v0) | 1.1B | Webvid(pretrain) + MiraData-v0 | 384x240, 60 frames |
+
+Please download the above checkponits in our [huggingface page](https://huggingface.co/TencentARC/Mira-v0). 
 
 ### Finetuning the Mira-v0 model on 128x80 resolution.
 
