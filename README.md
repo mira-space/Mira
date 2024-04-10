@@ -3,7 +3,7 @@
     <img src="./assets/readme/miralogo.png" width="250"/>
 </p>
 
-#  Mira: A Preliminary Journey into Mini-Sora
+#  Mira: A Mini-step Towards Sora-like Long Video Generation
 
 
 > [Zhaoyang Zhang](https://zzyfd.github.io/)<sup>1*</sup>, [Ziyang Yuan](https://github.com/jiangyzy)<sup>1*</sup>, [Xuan Ju](https://github.com/juxuan27)<sup>1</sup>, [Yiming Gao](https://scholar.google.com/citations?user=uRCc-McAAAAJ&hl=zh-TW)<sup>1</sup>, [Xintao Wang](https://xinntao.github.io/)<sup>1#</sup>,  [Chun Yuan](https://scholar.google.com/citations?hl=en&user=fYdxi2sAAAAJ), [Ying Shan](https://www.linkedin.com/in/YingShanProfile/)<sup>1</sup>, <br>
