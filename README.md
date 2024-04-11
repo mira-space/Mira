@@ -1,6 +1,6 @@
 
 <p align="center">
-    <img src="./assets/readme/miralogo.png" width="250"/>
+  <img src="assets/miralogo_s.png" height=80>
 </p>
 
 #  Mira: A Mini-step Towards Sora-like Long Video Generation
