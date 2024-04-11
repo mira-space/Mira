@@ -1,5 +1,5 @@
 
-ckpt=checkpints/128-v0.pt # path to your checkpints
+ckpt=checkpoints/128-v0.pt # path to your checkpoints
 
 
 

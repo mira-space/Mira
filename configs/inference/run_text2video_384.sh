@@ -1,5 +1,5 @@
 
-ckpt=checkpints/384-v0.pt
+ckpt=checkpoints/384-v0.pt
 
 
 

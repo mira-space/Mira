@@ -3,7 +3,7 @@ model:
   base_learning_rate: 1.0e-5
   scale_lr: false
   target: mira.models.ddpm3d.MiraDDPM
-  pretrained_checkpoint:  checkpints/384-v0.pt # path to pretrain checkpoint
+  pretrained_checkpoint:  checkpoints/384-v0.pt # path to pretrain checkpoint
   params:
     linear_start: 0.00085
     linear_end: 0.012
