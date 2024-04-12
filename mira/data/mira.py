@@ -96,12 +96,13 @@ class Mira(Dataset):
                     index = index % len(self)
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = "{}. {}".format(sample['tag'], sample['short_caption'])
+                    caption = "{}. {}".format(sample['tag'] , sample['short_caption']).replace('nan', '')
+
                 elif index % len(self) < 2 * len(self.metadata):
                     index = index % len(self) - len(self.metadata)
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = "{}. {}".format(sample['tag'], sample['dense_caption'])
+                    caption = "{}. {}".format(sample['tag'], sample['dense_caption']).replace('nan', '')
                 else:
                     index = index % len(self) - 2 * len(self.metadata)
                     sample = self.metadata.iloc[index]
@@ -111,7 +112,7 @@ class Mira(Dataset):
                         sample['main_object_caption'],
                         sample['background_caption'],
                         sample['style_caption'],
-                        sample['camera_caption'])
+                        sample['camera_caption']).replace('nan', '')
             else:
                 index = index % len(self.webvid_metadata)
                 sample = self.webvid_metadata.iloc[index]
@@ -189,3 +190,56 @@ class Mira(Dataset):
     def __len__(self):
         return len(self.metadata) * 3  # short dense full
 
+
+if __name__ == "__main__":
+
+    meta_path = "/group/40033/public_datasets/miradata/caption/caption_before_03M22D15H.csv"
+
+    dataset = Mira(meta_path,
+                   subsample=None,
+                   video_length=16,
+                   resolution=None,
+                   frame_stride=1,
+                   spatial_transform=None,
+                   crop_resolution=None,
+                   fps_max=None,
+                   load_raw_resolution=True
+                   )
+
+    dataloader = DataLoader(dataset,
+                            batch_size=1,
+                            num_workers=0,
+                            shuffle=True)
+    print(f'dataset len={dataset.__len__()}')
+    i = 0
+    total_fps = set()
+    res1 = [336, 596]
+    res2 = [316, 600]
+    n_videos_res1 = 0
+    n_videos_res2 = 0
+    n_videos_misc = 0
+    other_res = []
+
+    for i, batch in tqdm(enumerate(dataloader), desc="Data Batch"):
+        # pass
+        print(f"video={batch['video'].shape}, fps={batch['fps']}")
+        total_fps.add(batch['fps'].item())
+        if batch['video'].shape[-2] == res1[0] and batch['video'].shape[-1] == res1[1]:
+            n_videos_res1 += 1
+        elif batch['video'].shape[-2] == res2[0] and batch['video'].shape[-1] == res2[1]:
+            n_videos_res2 += 1
+        else:
+            n_videos_misc += 1
+            other_res.append(list(batch['video'].shape[3:]))
+
+        if (i + 1) == 1000:
+            break
+
+    print(f'total videos = {i}')
+    print('======== total_fps ========')
+    print(total_fps)
+    print('======== resolution ========')
+    print(f'res1 {res1}: n_videos = {n_videos_res1}')
+    print(f'res2 {res2}: n_videos = {n_videos_res2}')
+    print(f'other resolution: n_videos = {n_videos_misc}')
+    print(f'other resolutions: {other_res}')
