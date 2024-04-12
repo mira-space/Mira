@@ -15,18 +15,21 @@
 [![MiraData Page](https://img.shields.io/badge/MiraData-Page-blue)](https://github.com/mira-space/MiraData)
 
 
-We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, long-duration video generation in the style of Sora. Sora stands out from existing text-to-video (T2V) generation frameworks in several key ways:
 
-* Extended sequence length: While most frameworks are limited to generating short videos (2 seconds / 16 frames), Sora is designed to produce significantly longer sequences, potentially lasting 10 seconds, 20 seconds, or more.
+We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, long-duration video generation in the style of Sora. Mira stands out from existing text-to-video (T2V) generation frameworks in several key ways:
 
-* Enhanced dynamics: Sora has the capability to create videos with rich dynamics and intricate motions, setting it apart from the more static outputs of current video generation technologies.
+* Extended sequence length: While most frameworks are limited to generating short videos (2 seconds / 16 frames), Mira is designed to produce significantly longer sequences, potentially lasting 10 seconds, 20 seconds, or more.
+
+* Enhanced dynamics: Mira has the capability to create videos with rich dynamics and intricate motions, setting it apart from the more static outputs of current video generation technologies.
+
+* Strong 3D consistency: Despite the intricate dynamics and object interactions, Mira ensures the 3D integrity of objects is preserved throughout the video, avoiding noticeable distortions.
+
+
+Please acknowledge that our work on Mira is in the experimental phase. There are several areas where Sora still significantly outperforms Mira and other open-source T2V frameworks, including:
 
 * Interactive objects and environments: Sora supports the generation of videos where objects and surroundings engage in dynamic interactions, adding a layer of complexity and realism. 
 
-* Strong 3D consistency: Despite the intricate dynamics and object interactions, Sora ensures the 3D integrity of objects is preserved throughout the video, avoiding noticeable distortions.
-
 * Sustained object consistency: Sora maintains consistent object shapes, even when they temporarily exit and re-enter the frame, ensuring continuity and coherence.
-
 
 
 The Mira project is our endeavor to investigate and refine the entire data-model-training pipeline for Sora-like, lightweight T2V frameworks, and to preliminarily demonstrate the aforementioned Sora characteristics. Our goal is to foster innovation and democratize the field of content creation, paving the way for more accessible and advanced video generation tools.
