@@ -161,3 +161,27 @@ bash configs/inference/run_text2video_384.sh
 
 ```
 
+## Current Limitations
+Mira-v0 represents our initial exploration into developing a Sora-like Text-to-Video (T2V) pipeline. Through this process, we have identified several areas for improvement in the current version:
+
+* **Enhanced motion dynamics and scene intricacy at the expense of generic object generation.** The Mira-v0 model, being fine-tuned on the potentially limited MiraData-v0, shows a reduced capability in generating a diverse range of objects compared to the WebVid-pretrained MiraDiT. However, it's worth noting that the Mira-v0 model has shown notable advancements in motion dynamics, scene detail, and three-dimensional consistency. We plan to expand the MiraData and refine our training approach to bolster Mira's versatility in future updates.
+
+| 10s 384x240 | 10s 384x240  |  10s 384x240| 
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  [<img src="https://github.com/mira-space/Mira/assets/13939478/b7e16946-04ec-438d-8df8-8bf0da6200e1" width="300">](https://github.com/mira-space/Mira/assets/13939478/b7e16946-04ec-438d-8df8-8bf0da6200e1) |    [<img src="https://github.com/mira-space/Mira/assets/13939478/a654666b-1d0e-429b-83ae-97ae9516985a" width="300">](https://github.com/mira-space/Mira/assets/13939478/a654666b-1d0e-429b-83ae-97ae9516985a)|[<img src="https://github.com/mira-space/Mira/assets/13939478/8c314482-81fc-4d95-ab1b-b45a28bd3dee" width="300">](https://github.com/mira-space/Mira/assets/13939478/8c314482-81fc-4d95-ab1b-b45a28bd3dee) | 
+| A cute dog sniffing around the sandy coast. | A serene underwater scene featuring a sea turtle swimming through a coral reef. | A serene underwater scene featuring a sea turtle swimming through a coral reef. The turtle is with its greenish-brown shell. | 
+
+
+
+
+
+
+
+
+
+
+* **Reconstruction artifacts**. We aim to integrate a video Variational Autoencoder (VAE) with adaptive resolution to address this issue.
+
+* **Sustained object consistency**. Our current MiraDiT, constrained by available resources, uses separate modules to handle spatial and temporal aspects, which can compromise object stability in longer, high-dynamic videos. We are looking into solutions to maintain consistent object representation throughout the video generation process."
+
+
