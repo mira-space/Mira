@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 from pytorch_lightning import seed_everything
 
 sys.path.insert(1, os.path.join(sys.path[0], '..', '..'))
-sys.path.insert(1, os.path.join(sys.path[0], '..', '..', '..'))
 from mira.models.samplers.ddim import DDIMSampler
 from utils.utils import instantiate_from_config
 
@@ -30,7 +29,7 @@ def load_model_checkpoint(model, ckpt):
             new_pl_sd = OrderedDict()
             for key in pl_sd['module'].keys():
                 new_pl_sd[key[16:]]=pl_sd['module'][key]
-            model.load_state_dict(new_pl_sd)
+            model.load_state_dict(new_pl_sd, strict=False)
 
     return model
 
@@ -101,18 +100,8 @@ def inference_prompt(model, prompts, noise_shape, n_samples=1, ddim_steps=50, dd
                                             eta=ddim_eta,
                                             temporal_length=noise_shape[2],
                                             conditional_guidance_scale_temporal=unconditional_guidance_scale_temporal, **kwargs
-                                             # guidance_rescale=0.7, ddim_discretize="uniform_trailing", **kwargs
                                             )
         
-        ## reconstruct from latent to pixel space
-        # try:
-        #     batch_images = model.decode_first_stage_2DAE(samples)
-        # except:
-            # In case of OOM when decoding
-        # model.to('cpu')
-        # model.first_stage_model.to('cuda')
-        # batch_images = model.decode_first_stage_2DAE(samples)
-        # model.to('cuda')
 
         batch_variants.append(samples)
 
@@ -135,12 +124,12 @@ def assign_tasks(num_samples, gpu_num):
 
     return gpu_indices
 
+@torch.no_grad()
 def run_inference(args, rank, gpu_num):
     ## model config
     config = OmegaConf.load(args.base)
     data_config = config.pop("data", OmegaConf.create())
     model_config = config.pop("model", OmegaConf.create())
-    # model_config['params']['denoiser_config']['params']['use_checkpoint']=False
     model_config['params']['inference']=True               
     model = instantiate_from_config(model_config)
     gpu_per_node = torch.cuda.device_count()
@@ -179,7 +168,6 @@ def run_inference(args, rank, gpu_num):
         samples_split = len(indices)
         print('Prompts testing [rank:%d] %d/%d samples loaded.'%(rank, samples_split, num_samples))
         
-        # prompt_list_rank = [prompt_list[i] for i in indices]
         while True:
             all_sample = []
             for i in tqdm(range(0, len(indices), args.bs), desc='Sample Batch'):
@@ -195,7 +183,9 @@ def run_inference(args, rank, gpu_num):
             ## To avoide OOM
             decoder = model.first_stage_model
             scale_factor = model.scale_factor
-            # del model
+            if args.width > 384:
+                model.cpu()
+                decoder.cuda()
             from einops  import rearrange
             def decode(z):
                 z = 1.0 / scale_factor * z
@@ -215,20 +205,17 @@ def run_inference(args, rank, gpu_num):
                     filename = "%04d" % (nn)
                     save_results(prompt, res, None, filename, realdir, fakedir, fps=6)
                 elif batch_samples.dim() == 6:
-                    for i in range(batch_samples.shape[1]):
-                        res = decode(batch_samples[:,i])
+                    batch_samples_cpu = [batch_samples[:, i].cpu() for i in range(batch_samples.shape[1])]
+                    del batch_samples
+                    i = 0
+                    while(batch_samples_cpu):
+                        res = decode(batch_samples_cpu.pop(0).cuda())
                         filename = "%04d_Version%04d" % (nn, i)
                         save_results(prompt, res, None, filename, realdir, fakedir, fps=6)
+                        i+=1
+                        del res
                 nn += 1
-                del batch_samples
-
-                # ## save each example individually
-                # for nn, samples in enumerate(batch_samples):
-                #     ## samples : [n_samples,c,t,h,w]
-                #     prompt = prompts[nn]
-                #     filename = "%04d"%(indice)
-                #     save_results(prompt, samples, None, filename, realdir, fakedir, fps=6)
-
+            model.cuda()
 
             import time as t
             t.sleep(20)
