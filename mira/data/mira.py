@@ -96,23 +96,14 @@ class Mira(Dataset):
                     index = index % len(self)
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = "{}. {}".format(sample['tag'] , sample['short_caption']).replace('nan', '')
+                    caption = sample['short_caption'] 
 
-                elif index % len(self) < 2 * len(self.metadata):
+                else index % len(self) < 2 * len(self.metadata):
                     index = index % len(self) - len(self.metadata)
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = "{}. {}".format(sample['tag'], sample['dense_caption']).replace('nan', '')
-                else:
-                    index = index % len(self) - 2 * len(self.metadata)
-                    sample = self.metadata.iloc[index]
-                    video_path, rel_fp = self._get_video_path(sample)
-                    caption = "Tag: {}. Dense caption {}.  Main object: {}. Background: {}.  Style: {}. Camera: {}. ".format(
-                        sample['tag'], sample['dense_caption'],
-                        sample['main_object_caption'],
-                        sample['background_caption'],
-                        sample['style_caption'],
-                        sample['camera_caption']).replace('nan', '')
+                    caption = sample['dense_caption'] 
+
             else:
                 index = index % len(self.webvid_metadata)
                 sample = self.webvid_metadata.iloc[index]
@@ -188,12 +179,12 @@ class Mira(Dataset):
         return data
 
     def __len__(self):
-        return len(self.metadata) * 3  # short dense full
+        return len(self.metadata) * 2  # short dense full
 
 
 if __name__ == "__main__":
 
-    meta_path = "/group/40033/public_datasets/miradata/caption/caption_before_03M22D15H.csv"
+    meta_path = "" # Mira data path
 
     dataset = Mira(meta_path,
                    subsample=None,
