@@ -1,3 +1,4 @@
+
 import os, random
 from functools import partial
 import numpy as np
@@ -10,7 +11,7 @@ mainlogger = logging.getLogger('mainlogger')
 
 import torch
 from torchvision.utils import make_grid
-from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, ReduceLROnPlateau
 import torch.distributed as dist
 from pytorch_lightning.utilities import rank_zero_only
 
@@ -62,11 +63,14 @@ class MiraDDPM(DDPM):
                  empty_params_only=False,
                  fix_layernorm=False,
                  train_attn=False,
+                 lora_rank=16,
                  inject_denoiser=False,
                  inject_clip=False,
                  inject_denoiser_key_word=None,
                  inject_clip_key_word=None,
+                 lora_scale=1.0,
                  inject_denoiser_child_name=None,
+                 lora_linear=False,
                  noise_normal=False,
                  use_scale=False,
                  scale_a=1,
@@ -86,34 +90,45 @@ class MiraDDPM(DDPM):
                  single_frame_loss=False,
                  no_train_block=None,
                  bigbatch_encode=False,
-                 spatial_mini_batch=1,
+                 spatial_mini_batch=None,
+                 spatial_mini_decode=None,
+                 lora_already=False,
                  cond_stage_config2=None,
                  video_to_image=False,
                  video_diff_step=False,
+                 random_resolution=False,
+                 random_resolution_ratio=[1],
                  noise_offset=0,  prompt_val=None, temporal_vae=False,
-                 rescale_betas_zero_snr=False, rec_loss=0,
+                 rescale_betas_zero_snr=False, rec_loss=0 ,temp_mask=True,
                  *args, **kwargs):
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
+        self.temp_mask =temp_mask
         assert self.num_timesteps_cond <= kwargs['timesteps']
         # for backwards compatibility after implementation of DiffusionWrapper
         ckpt_path = kwargs.pop("ckpt_path", None)
         ignore_keys = kwargs.pop("ignore_keys", [])
         conditioning_key = default(conditioning_key, 'crossattn')
         self.rescale_betas_zero_snr = rescale_betas_zero_snr
-
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
+        self.random_resolution_ratio = random_resolution_ratio
         self.rec_loss = rec_loss
+        # if rec_loss and self.training:
+        #     from ..losses.contperceptual import LPIPSWithDiscriminator
+        #     self.lpips = LPIPSWithDiscriminator(50001, kl_weight=1e-6, disc_weight=0.5)
         self.cond_stage_trainable = cond_stage_trainable
         self.cond_stage_key = cond_stage_key
         self.empty_params_only = empty_params_only
         self.fix_layernorm = fix_layernorm
         self.train_attn = train_attn
+        self.lora_scale = lora_scale
+        self.lora_rank = lora_rank
         self.inject_denoiser = inject_denoiser
         self.inject_clip = inject_clip
         self.inject_denoiser_key_word = inject_denoiser_key_word
         self.inject_clip_key_word = inject_clip_key_word
         self.inject_denoiser_child_name = inject_denoiser_child_name
+        self.lora_linear = lora_linear
         self.noise_normal = noise_normal
         self.enable_deepspeed = False
         # load testing prompts
@@ -134,6 +149,9 @@ class MiraDDPM(DDPM):
         self.no_train_block = no_train_block
         self.bigbatch_encode = bigbatch_encode
         self.spatial_mini_batch = spatial_mini_batch
+        self.spatial_mini_batch_decode =  spatial_mini_decode if spatial_mini_decode is not  None else spatial_mini_batch
+        self.random_resolution = random_resolution
+        self.lora_already = lora_already
         self.video_to_image = video_to_image
         self.video_diff_step = video_diff_step
         self.noise_offset = noise_offset
@@ -204,8 +222,10 @@ class MiraDDPM(DDPM):
             self.restarted_from_ckpt = True
 
         self.logdir = logdir
-
-
+        if inference and self.inject_denoiser:
+            self._inject_lora()
+        if self.lora_already:
+            self._inject_lora()
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
@@ -215,8 +235,6 @@ class MiraDDPM(DDPM):
     def q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start)
-
-
         if self.use_scale:
             return (extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start *
                     extract_into_tensor(self.scale_arr, t, x_start.shape) +
@@ -229,24 +247,49 @@ class MiraDDPM(DDPM):
         for name, para in self.model.diffusion_model.named_parameters():
             para.requires_grad = False
 
+    def _inject_lora(self, ):
+        """
+        inject lora to denoiser and text encoder
+        """
+        if self.inject_denoiser:
+            if self.lora_linear:
+                self.lora_require_grad_params, self.lora_names = lora.inject_trainable_lora(self.model,
+                                                                                            self.inject_denoiser_key_word,
+                                                                                            r=self.lora_rank,
+                                                                                            scale=self.lora_scale)
+            else:
+                self.lora_require_grad_params, self.lora_names = lora.inject_trainable_lora_extended(self.model,
+                                                                                                     self.inject_denoiser_key_word,
+                                                                                                     r=self.lora_rank,
+                                                                                                     scale=self.lora_scale,
+                                                                                                     verbose=True,
+                                                                                                     module_child_name=self.inject_denoiser_child_name,
+                                                                                                     )
 
-    @rank_zero_only
+        if self.inject_clip:
+            self.lora_require_grad_params_clip, self.lora_names_clip = lora.inject_trainable_lora(self.cond_stage_model,
+                                                                                                  self.inject_clip_key_word,
+                                                                                                  r=self.lora_rank,
+                                                                                                  scale=self.lora_scale
+                                                                                                  )
+
     @torch.no_grad()
     def on_train_batch_start(self, batch, batch_idx, dataloader_idx=None):
-        # only for very first batch, reset the self.scale_factor
-        if self.scale_by_std and self.current_epoch == 0 and self.global_step == 0 and batch_idx == 0 and \
-                not self.restarted_from_ckpt:
-            assert self.scale_factor == 1., 'rather not use custom rescaling and std-rescaling simultaneously'
-            # set rescale weight to 1./std of encodings
-            mainlogger.info("### USING STD-RESCALING ###")
-            # x = super().get_input(batch, self.first_stage_key)
-            x, c, fps = self.get_batch_input(batch, random_uncond=0, is_imgbatch=True)
-            z = x.detach()
-            del self.scale_factor
-            self.register_buffer('scale_factor', 1. / z.flatten().std())
-            mainlogger.info(f"setting self.scale_factor to {self.scale_factor}")
-            mainlogger.info("### USING STD-RESCALING ###")
-            mainlogger.info(f"std={z.flatten().std()}")
+        if self.random_resolution:
+            random.seed(self.global_step)
+            ratio = random.choice(self.random_resolution_ratio)
+            ratio = eval(ratio) if isinstance(ratio, str) else ratio
+            ratio = torch.Tensor([ratio])
+            _, _, t, h, w = batch[self.first_stage_key].shape
+            sh, sw = ( h *ratio//2 ) *2, ( w *ratio//2 ) *2
+            if ratio != 1:
+                batch[self.first_stage_key] = torch.nn.functional.interpolate( batch[self.first_stage_key].detach(), size=(t, int(sh), int(sw)), mode='trilinear')
+
+        # print('Curr ', batch[self.first_stage_key].shape)
+
+
+
+        # print('Curr shape ', batch[self.first_stage_key].shape)
 
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
                           linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
@@ -260,7 +303,9 @@ class MiraDDPM(DDPM):
             betas = rescale_zero_terminal_snr(betas)
 
         alphas = 1. - betas
+        # mainlogger.info(f"alphas={alphas}")
         alphas_cumprod = np.cumprod(alphas, axis=0)
+        # mainlogger.info(f"alphas_cumprod={alphas_cumprod}")
         alphas_cumprod_prev = np.append(1., alphas_cumprod[:-1])
 
         timesteps, = betas.shape
@@ -279,8 +324,21 @@ class MiraDDPM(DDPM):
         self.register_buffer('sqrt_alphas_cumprod', to_torch(np.sqrt(alphas_cumprod)))
         self.register_buffer('sqrt_one_minus_alphas_cumprod', to_torch(np.sqrt(1. - alphas_cumprod)))
         self.register_buffer('log_one_minus_alphas_cumprod', to_torch(np.log(1. - alphas_cumprod)))
-        self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod)))
-        self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
+        self.register_buffer('sqrt_recip_alphas_cumprod', to_torch(np.sqrt(1. / (alphas_cumprod + 1e-5 ) )))
+        self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / (alphas_cumprod +1e-5) - 1)))
+
+        # calculations for posterior q(x_{t-1} | x_t, x_0)
+        posterior_variance = (1 - self.v_posterior) * betas * (1. - alphas_cumprod_prev) / (
+                1. - alphas_cumprod) + self.v_posterior * betas
+        # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
+        self.register_buffer('posterior_variance', to_torch(posterior_variance))
+        # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
+        self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
+        self.register_buffer('posterior_mean_coef1', to_torch(
+            betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
+        self.register_buffer('posterior_mean_coef2', to_torch(
+            (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
+
 
         # calculations for posterior q(x_{t-1} | x_t, x_0)
         posterior_variance = (1 - self.v_posterior) * betas * (1. - alphas_cumprod_prev) / (
@@ -314,7 +372,7 @@ class MiraDDPM(DDPM):
             self.make_cond_schedule()
 
     def instantiate_first_stage(self, config):
-        if 'diffusers' in config.target:
+        if 'diffusers' in config.target or 'videobase' in config.target :
             from utils.utils import get_obj_from_str
             logging.info("Using diffuser VAE")
             model = get_obj_from_str(config.target).from_pretrained(config.ckpt, subfolder="vae")
@@ -322,11 +380,22 @@ class MiraDDPM(DDPM):
             model = instantiate_from_config(config)
 
 
-        self.first_stage_model = model.eval()
-        self.first_stage_model.train = disabled_train
-        for param in self.first_stage_model.parameters():
-            param.requires_grad = False
+        if self.training and self.rec_loss:
+            self.first_stage_model = model.train()
+            for n, param in self.first_stage_model.named_parameters():
+                param.requires_grad = True
+        else:
+            self.first_stage_model = model.eval()
+            self.first_stage_model.train = disabled_train
+            for param in self.first_stage_model.parameters():
+                param.requires_grad = False
 
+        if 'enc_dim' in config:
+            self.first_stage_model.enc_dim = config.enc_dim
+        if 'dec_dim' in config:
+            self.first_stage_model.dec_dim = config.dec_dim
+        if 'mode' in config:
+            self.first_stage_model.mode = config.mode
         sd_ckpt = getattr(config, 'pretrain', None)
         if sd_ckpt:
             mainlogger.info('##### Using ST Pretrain VAE')
@@ -463,7 +532,25 @@ class MiraDDPM(DDPM):
     def get_batch_input(self, batch, random_uncond, return_first_stage_outputs=False, return_original_cond=False,
                         is_imgbatch=False, log=False):
         ## image/video shape: b, c, t, h, w
-        data_key = 'jpg' if is_imgbatch else self.first_stage_key
+        data_key =  self.first_stage_key
+        _, _, t ,h ,w = batch[data_key].shape
+
+
+        if min(h, w) > 240:
+            video_length = min(30, t) if min(h, w) > 480 else min(60, t)
+        else:
+            video_length = t
+
+        if self.random_resolution:
+            random.seed(self.global_step)
+            video_length = random.randint(1, video_length)
+
+        batch[data_key] =  (batch[data_key].detach())[: ,: ,:video_length]
+        if 'temp_mask' in batch:
+            batch['temp_mask'] = batch['temp_mask'][:, :video_length]
+
+        # print('Input  ', self.global_step, batch[data_key].shape)
+
         x = super().get_input(batch, data_key)
         if is_imgbatch:
             ## pack image as video
@@ -491,7 +578,6 @@ class MiraDDPM(DDPM):
             if is_imgbatch:
                 cond_key = 'txt'
                 cond = batch[cond_key]
-
                 if log:
                     cond = [cond[0]]
             else:
@@ -547,7 +633,7 @@ class MiraDDPM(DDPM):
 
         ## optional output: self-reconst or caption
         if return_first_stage_outputs:
-            xrec =  self.decode_first_stage_2DAE(z)
+            xrec = z if self.rec_loss and self.training else self.decode_first_stage_2DAE(z)
             out.extend([x_ori, xrec])
         if return_original_cond:
             out.append(cond)
@@ -566,37 +652,43 @@ class MiraDDPM(DDPM):
 
     def shared_step(self, batch, random_uncond, **kwargs):
         is_imgbatch = False
-        if "loader_img" in batch.keys():
-            # ratio = 10.0 / self.temporal_length
-            ratio = self.iv_ratio
-            if random.random() < ratio:
-                is_imgbatch = True
-                batch = batch["loader_img"]
-            else:
-                batch = batch["loader_video"]
-        else:
-            if 'json' in batch.keys():
-                is_imgbatch = True
-            else:
-                pass
+
 
         if self.video_diff_step:
             inter_num_timesteps = 500
         else:
             inter_num_timesteps = None
 
+
         if self.rec_loss:
-            x, c, fps, xori, xrec = self.get_batch_input(batch, random_uncond=random_uncond, is_imgbatch=is_imgbatch,
-                                                         return_first_stage_outputs=True)
+            loss, loss_dict = 0, {}
+            torch.cuda.empty_cache()
+            data_key = 'jpg' if is_imgbatch else self.first_stage_key
+            xori = super().get_input(batch, data_key)
+            ## encode video frames x to z via a 2D encoder
+            with torch.no_grad():
+                z = self.encode_first_stage_2DAE_diff(xori)
+            xrec =self.decode_first_stage_3DVAE_diff(z)
+            rec_loss_lpips = \
+                self.first_stage_model.loss(xori, xrec,
+                                            optimizer_idx=self.global_step % 2, global_step=self.global_step
+                                            , last_layer=self.first_stage_model.get_last_layer())  # weights=1e-4
+            # rec_loss = rec_loss_lpips  + rec_loss_l1
+            loss = rec_loss_lpips[0]
+            loss_dict.update(rec_loss_lpips[1])
+
+            # loss_dict.update({f'trian/rec_loss_l1': rec_loss_l1.mean()})
+            # loss_dict.update({f'trian/rec_loss_lpips': rec_loss_lpips.mean()})
         else:
             x, c, fps = self.get_batch_input(batch, random_uncond=random_uncond, is_imgbatch=is_imgbatch,
                                              return_first_stage_outputs=False)
 
-        loss, loss_dict = self(x, c, is_imgbatch=is_imgbatch and not self.img_copy_video, fps=fps,
-                               video_to_image=self.video_to_image, inter_num_timesteps=inter_num_timesteps, **kwargs)
-        if self.rec_loss:
-            rec_loss = self.get_loss(xori, xrec)
-            loss_dict.update({f'trian/rec_loss': rec_loss.mean()})
+            kwargs['temp_mask'] = batch['temp_mask'] if 'temp_mask' in batch and self.temp_mask else None
+
+            loss, loss_dict = self(x, c, is_imgbatch=is_imgbatch and not self.img_copy_video, fps=fps,
+                                   video_to_image=self.video_to_image, inter_num_timesteps=inter_num_timesteps,
+                                   **kwargs)
+
         return loss, loss_dict
 
     def apply_model(self, x_noisy, t, cond, **kwargs):
@@ -623,6 +715,7 @@ class MiraDDPM(DDPM):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_out = self.apply_model(x_noisy, t, cond, **kwargs)
+        b, _, T, _, _, = model_out.shape
 
         loss_dict = {}
         if self.parameterization == "eps":
@@ -634,23 +727,30 @@ class MiraDDPM(DDPM):
         else:
             raise NotImplementedError(f"Parameterization {self.parameterization} not yet supported")
 
-        loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3, 4])
+        loss_rescaler = 1
+        if kwargs['temp_mask'] is not None:
+            model_out = model_out * kwargs['temp_mask'].view(b, 1, T, 1, 1)
+            target = target * kwargs['temp_mask'].view(b, 1, T, 1, 1)
+            loss_rescaler = (b * t) / (kwargs['temp_mask'].sum() + 1e-5)
+
+        loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3, 4]) * loss_rescaler
 
         log_prefix = 'train' if self.training else 'val'
 
         loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
         loss_simple = loss.mean() * self.l_simple_weight
-
-        loss_vlb = (self.lvlb_weights[t] * loss).mean()
-        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
-
-        loss = loss_simple + self.original_elbo_weight * loss_vlb
+        loss = loss_simple
+        if not self.parameterization == "v":
+            loss_vlb = (self.lvlb_weights[t] * loss).mean() * loss_rescaler
+            loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+            loss = loss + self.original_elbo_weight * loss_vlb
 
         loss_dict.update({f'{log_prefix}/loss': loss})
 
         return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
+
         loss, loss_dict = self.shared_step(batch, random_uncond=self.classifier_free_guidance)
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=False)
         if (batch_idx + 1) % self.log_every_t == 0:
@@ -752,10 +852,8 @@ class MiraDDPM(DDPM):
 
             seed_everything(self.seed)
 
-
         torch.cuda.empty_cache()
         if dist.get_rank() == 0:
-
             torch.cuda.empty_cache()
             fvd, kvd, n_samples = 0.000, 0.000, 2048
             mainlogger.info('metric calculating over %d samples' % n_samples)
@@ -775,7 +873,6 @@ class MiraDDPM(DDPM):
 
         if denoise_row.dim() == 5:
             # img, num_imgs= n_log_timesteps * bs, grid_size=[bs,n_log_timesteps]
-            # 先batch再n，grid时候一行是一个sample的不同steps，batch是列，行是n
             denoise_grid = rearrange(denoise_row, 'n b c h w -> b n c h w')
             denoise_grid = rearrange(denoise_grid, 'b n c h w -> (b n) c h w')
             denoise_grid = make_grid(denoise_grid, nrow=n_log_timesteps)
@@ -796,90 +893,91 @@ class MiraDDPM(DDPM):
                    unconditional_guidance_scale=1.0, guidance_rescale=0, ddim_discretize="uniform_uniform_trailing",
                    **kwargs):
         """ log images for LatentDiffusion """
-        ## TBD: currently, classifier_free_guidance sampling is only supported by DDIM
-        use_ddim = ddim_steps is not None
-        log = dict()
-        is_imgbatch = False
-        if "loader_img" in batch.keys():
-            batch = batch["loader_video"]
-        else:
-            if 'json' in batch.keys():
-                is_imgbatch = True
-            else:
-                pass
-        fps = None
-        torch.cuda.empty_cache()
-        z, c, fps, x, xrec, xc = self.get_batch_input(batch, random_uncond=False,
-                                                      return_first_stage_outputs=True,
-                                                      return_original_cond=True, is_imgbatch=is_imgbatch,
-                                                      log=is_imgbatch)
-        N, _, T, H, W = x.shape
-        log["inputs"] = x
-        log["reconst"] = xrec
-        log["condition"] = xc
-        # if type(fps) == int:
-        #     fps=None
-        if fps is not None and self.fps_cond:
-            if is_imgbatch:
-                fps_list = [fps] * N
-            else:
-                fps_list = list(map(str, fps.cpu().tolist()))
-            log["fps"] = fps_list
-
-        if sample:
-            # get uncond embedding for classifier-free guidance sampling
-            if unconditional_guidance_scale != 1.0:
-                if isinstance(c, dict):
-                    c_cat, c_emb = c["c_concat"][0], c["c_crossattn"][0]
-                    # log["condition_cat"] = c_cat
-                else:
-                    c_emb = c
-
-                if self.uncond_type == "empty_seq":
-                    prompts = N * [""]
-                    uc = self.get_learned_conditioning(prompts)
-                    if self.cond_stage_config2:
-                        uc2 = self.get_learned_conditioning2(prompts)[0]
-                        uc = torch.concat([uc, uc2], dim=-1)
-                elif self.uncond_type == "zero_embed":
-                    uc = torch.zeros_like(c_emb)
-                ## hybrid case
-                if isinstance(c, dict):
-                    uc_hybrid = {"c_concat": [c_cat], "c_crossattn": [uc]}
-                    uc = uc_hybrid
-            else:
-                uc = None
+        with torch.cuda.amp.autocast(dtype=torch.float32):
+            self.model.to(torch.float32)
+            use_ddim = ddim_steps is not None
+            log = dict()
             is_imgbatch = False
-            with self.ema_scope("Plotting"):
-                samples, z_denoise_row = self.sample_log(cond=c, batch_size=N, ddim=use_ddim,
-                                                         ddim_steps=ddim_steps, eta=ddim_eta,
-                                                         unconditional_guidance_scale=unconditional_guidance_scale,
-                                                         unconditional_conditioning=uc, mask=self.cond_mask, x0=z,
-                                                         is_imgbatch=is_imgbatch, fps=fps,
-                                                         guidance_rescale=guidance_rescale,
-                                                         ddim_discretize=ddim_discretize, **kwargs)
+            if "loader_img" in batch.keys():
+                batch = batch["loader_video"]
+            else:
+                if 'jsaaon' in batch.keys():
+                    is_imgbatch = True
+                else:
+                    pass
+            fps = None
+            torch.cuda.empty_cache()
+            z, c, fps, x, xrec, xc = self.get_batch_input(batch, random_uncond=False,
+                                                          return_first_stage_outputs=True,
+                                                          return_original_cond=True, is_imgbatch=is_imgbatch,
+                                                          log=is_imgbatch)
+            N, _, T, H, W = x.shape
+            log["inputs"] = x
+            log["reconst"] = xrec
+            log["condition"] = xc
+            # if type(fps) == int:
+            #     fps=None
+            if fps is not None and self.fps_cond:
+                if is_imgbatch:
+                    fps_list = [fps] * N
+                else:
+                    fps_list = list(map(str, fps.cpu().tolist()))
+                log["fps"] = fps_list
 
-            x_samples = self.decode_first_stage_2DAE(samples)
-            log["samples"] = x_samples
+            if sample:
+                # get uncond embedding for classifier-free guidance sampling
+                if unconditional_guidance_scale != 1.0:
+                    if isinstance(c, dict):
+                        c_cat, c_emb = c["c_concat"][0], c["c_crossattn"][0]
+                        # log["condition_cat"] = c_cat
+                    else:
+                        c_emb = c
 
-            ## log testing samples
-            if self.prompt_val:
-                torch.cuda.empty_cache()
-                iterator = tqdm(range(len(self.prompt_val)))
-                noise_shape = (1, self.channels, self.temporal_length, *self.image_size)
-                for i in iterator:
-                    p = self.prompt_val[i]
-                    batch_samples = inference_prompt(self, p, noise_shape, 1, ddim_steps,
-                                                     ddim_eta,
-                                                     unconditional_guidance_scale,
-                                                     fps=fps, **kwargs)
-                    save_p = p if len(p) < 100 else p[:100]
-                    log["test/{}".format(save_p)] = batch_samples[0]
+                    if self.uncond_type == "empty_seq":
+                        prompts = N * [""]
+                        uc = self.get_learned_conditioning(prompts)
+                        if self.cond_stage_config2:
+                            uc2 = self.get_learned_conditioning2(prompts)[0]
+                            uc = torch.concat([uc, uc2], dim=-1)
+                    elif self.uncond_type == "zero_embed":
+                        uc = torch.zeros_like(c_emb)
+                    ## hybrid case
+                    if isinstance(c, dict):
+                        uc_hybrid = {"c_concat": [c_cat], "c_crossattn": [uc]}
+                        uc = uc_hybrid
+                else:
+                    uc = None
+                is_imgbatch = False
+                with self.ema_scope("Plotting"):
+                    samples, z_denoise_row = self.sample_log(cond=c, batch_size=N, ddim=use_ddim,
+                                                             ddim_steps=ddim_steps, eta=ddim_eta,
+                                                             unconditional_guidance_scale=unconditional_guidance_scale,
+                                                             unconditional_conditioning=uc, mask=self.cond_mask, x0=z,
+                                                             is_imgbatch=is_imgbatch, fps=fps, shape=z.shape[1:],
+                                                             guidance_rescale=guidance_rescale,
+                                                             ddim_discretize=ddim_discretize, **kwargs)
 
-            if plot_denoise_rows:
-                denoise_grid = self._get_denoise_row_from_list(z_denoise_row)
-                log["denoise_row"] = denoise_grid
+                x_samples = self.decode_first_stage_2DAE(samples)  # self.decode_first_stage_2DAE(samples)
+                log["samples"] = x_samples
 
+                ## log testing samples
+                if self.prompt_val:
+                    torch.cuda.empty_cache()
+                    iterator = tqdm(range(len(self.prompt_val)))
+                    noise_shape = (1, self.channels, self.temporal_length, *self.image_size)
+                    for i in iterator:
+                        p = self.prompt_val[i]
+                        batch_samples = inference_prompt(self, p, noise_shape, 1, ddim_steps,
+                                                         ddim_eta,
+                                                         unconditional_guidance_scale,
+                                                         fps=fps, **kwargs)
+                        save_p = p if len(p) < 100 else p[:100]
+                        log["test/{}".format(save_p)] = batch_samples[0]
+
+                if plot_denoise_rows:
+                    denoise_grid = self._get_denoise_row_from_list(z_denoise_row)
+                    log["denoise_row"] = denoise_grid
+        self.model.to(torch.float32)
         return log
 
     @torch.no_grad()
@@ -908,11 +1006,57 @@ class MiraDDPM(DDPM):
     def decode_first_stage_3DVAE(self, z):
         z = 1.0 / self.scale_factor * z
         b, c, t, h, w = z.shape
-        z = rearrange(z, "b c t h w -> (b t) c h  w", t=t)
-        kwargs = {"timesteps": t}
-        torch.cuda.empty_cache()
-        results = self.first_stage_model.decode(z, **kwargs)
-        results = rearrange(results, " (b t) c h  w  -> b c t h w ", t=t)
+
+        if getattr(self.first_stage_model, 'dec_dim', 4) == 4:
+
+            if self.bigbatch_encode and t > self.spatial_mini_batch_decode:
+                mini_b = self.spatial_mini_batch_decode
+
+                if t % mini_b != 0:
+                    z, z_res = z[:, :, : t - t % mini_b], z[:, :, t - t % mini_b:]
+
+                z = rearrange(z, "b c (t_b mini_b) h w -> t_b (b mini_b) c h  w", mini_b=mini_b)
+                kwargs = {"timesteps": mini_b}
+                torch.cuda.empty_cache()
+                results = []
+                self.cond_stage_model.cpu()
+
+                for i in range(t // mini_b):
+                    torch.cuda.empty_cache()
+                    curr = self.first_stage_model.decode(z[i], **kwargs).detach().unsqueeze(0)
+                    results.append(curr)
+
+                self.cond_stage_model.to(self.device)
+                results = torch.cat(results, dim=0)
+                results = rearrange(results, 't_b (b mini_b )  c h w -> b  c (t_b mini_b ) h w', mini_b=mini_b)
+
+
+
+            else:
+                z = rearrange(z, "b c t h w -> (b t) c h  w", t=t)
+                kwargs = {"timesteps": t}
+                torch.cuda.empty_cache()
+                results = self.first_stage_model.decode(z, **kwargs)
+                results = rearrange(results, " (b t) c h  w  -> b c t h w ", t=t)
+        else:
+            # z = rearrange(z, "b c t h w -> b c t h  w", t=t)
+            if self.bigbatch_encode:
+                mini_b = self.spatial_mini_batch
+                x = rearrange(z, 'b c (t_b mini_b ) h w -> (b t_b )  c mini_b h w', t_b=self.temporal_length // mini_b)
+                results = []
+                # self.model.cpu()
+                self.cond_stage_model.cpu()
+                for i in range(b * self.temporal_length // mini_b):
+                    torch.cuda.empty_cache()
+                    curr = self.first_stage_model.decode(x[i:i + 1]).detach()
+                    results.append(curr)
+                # self.model.cuda()
+                self.cond_stage_model.to(self.device)
+                results = torch.cat(results, dim=0)
+                results = rearrange(results, '(b t_b )  c mini_b h w -> b  c (t_b mini_b ) h w', b=b)
+            else:
+                results = self.first_stage_model.decode(z)
+
         return results
 
     def decode_first_stage_3DVAE_diff(self, z):
@@ -929,20 +1073,61 @@ class MiraDDPM(DDPM):
     def encode_first_stage_3DVAE(self, x):
         ## Currently still 2D form to suppotral SVD AEKL-Temporal-Decoder
         b, c, t, h, w = x.shape
+
+        if self.bigbatch_encode and t > self.spatial_mini_batch:
+            mini_b = self.spatial_mini_batch
+            if getattr(self.first_stage_model, 'enc_dim', 4) == 4:
+                x = rearrange(x, 'b c (t_b mini_b ) h w -> t_b  (b mini_b) c  h w', mini_b=mini_b)
+                results = []
+                self.cond_stage_model.cpu()
+                for i in range(t // mini_b):
+                    torch.cuda.empty_cache()
+                    curr = self.first_stage_model.encode(x[i]).unsqueeze(0).detach()
+                    results.append(curr)
+                self.cond_stage_model.to(self.device)
+                results = torch.cat(
+                    results, dim=0)
+                results = rearrange(results, 't_b  (b mini_b) c  h w -> b c (t_b mini_b)  h w', mini_b=mini_b)
+            else:
+                x = rearrange(x, 'b c (t_b mini_b ) h w ->  (b t_b) c  mini_b h w', mini_b=mini_b)
+                results = torch.cat(
+                    [self.first_stage_model.encode(x[i:i + 1]).mode().detach() for i in
+                     range(b * t // mini_b)], dim=0)
+                results = rearrange(results, ' (b t_b) c t h w -> b (t_b t)  c h w', b=b)
+
+        else:
+            if getattr(self.first_stage_model, 'enc_dim', 4) == 4:
+                x = rearrange(x, 'b c t h w -> (b t) c  h w')
+                results = self.first_stage_model.encode(x)
+                results = rearrange(results, '(b t) c h w -> b c t  h w', b=b)
+
+            else:
+                # x = rearrange(x, 'b c t h w -> b t c  h w')
+                results = self.first_stage_model.encode(x).mode()
+                # results = rearrange(results, 'b t c h w -> b c t h w', b=b)
+        torch.cuda.empty_cache()
+        return results * self.scale_factor
+
+    def encode_first_stage_2DAE_diff(self, x):
+        if self.temporal_vae:
+            return self.encode_first_stage_3DVAE(x)
+
+        b, c, t, h, w = x.shape
         x = rearrange(x, 'b c t h w -> (b t) c   h w')
         if self.bigbatch_encode:
             mini_b = self.spatial_mini_batch
             x = x.reshape(mini_b, t * b // mini_b, c, h, w)
+
             results = torch.cat(
-                [self.first_stage_model.encode(x[i]).detach().unsqueeze(0) for i in
+                [self.get_first_stage_encoding(self.first_stage_model.encode(x[i])).unsqueeze(0) for i in
                  range(mini_b)], dim=0)
             n, t_b_on_n, _, new_h, new_w = results.shape
             results = results.reshape(b * t, c, new_h, new_w)
         else:
-            results = self.first_stage_model.encode(x)
+            results = self.get_first_stage_encoding(self.first_stage_model.encode(x))
 
         results = rearrange(results, '(b t) c h w -> b c t  h w', b=b)
-        return results * self.scale_factor
+        return results
 
     @torch.no_grad()
     def encode_first_stage_2DAE(self, x):
@@ -1100,11 +1285,12 @@ class MiraDDPM(DDPM):
                                   mask=mask, x0=x0, **kwargs)
 
     @torch.no_grad()
-    def sample_log(self, cond, batch_size, ddim, ddim_steps, **kwargs):
+    def sample_log(self, cond, batch_size, ddim, ddim_steps, shape=None, **kwargs):
 
         if ddim:
             ddim_sampler = DDIMSampler(self)
-            shape = (self.channels, self.temporal_length, *self.image_size)
+            if shape is None:
+                shape = (self.channels, self.temporal_length, *self.image_size)
             kwargs.update({"clean_cond": True})
             samples, intermediates = ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
         else:
@@ -1113,7 +1299,9 @@ class MiraDDPM(DDPM):
         return samples, intermediates
 
     def configure_optimizers(self):
-
+        if self.inject_denoiser and not self.lora_already:
+            # self._freeze_model()
+            self._inject_lora()
         """ configure_optimizers for LatentDiffusion """
         lr = self.learning_rate
         if self.empty_params_only and hasattr(self, "empty_paras"):
@@ -1139,7 +1327,15 @@ class MiraDDPM(DDPM):
         elif self.no_train_block != None:  # for train_block
             params = [p for n, p in self.model.named_parameters() if not any(f in n for f in self.no_train_block)]
             mainlogger.info(f"@Training [{len(params)}] Empty Paramters ONLY.")
+        elif self.inject_denoiser:
 
+            if self.inject_denoiser:
+                params = list(itertools.chain(*self.lora_require_grad_params))
+            if self.inject_clip:
+                if self.inject_denoiser:
+                    params = params + list(itertools.chain(*self.lora_require_grad_params_clip))
+                else:
+                    params = list(itertools.chain(*self.lora_require_grad_params_clip))
         elif hasattr(self, 'trainable_denoiser_modules') and len(self.trainable_denoiser_modules) > 0:
             params = []
             params_names = []
@@ -1166,7 +1362,7 @@ class MiraDDPM(DDPM):
                 mainlogger.info(f"@Training [{len(params)}] Paramters. with fix layernorm[{len(empty_params)}]")
             elif self.train_attn:
                 params = [p for n, p in self.model.named_parameters() if (
-                            'attn1.to_' in n or 'attn2.to_' in n or 'in_layers.2.weight' in n or 'emb_layers.1.weight' in n or 'out_layers.3.weight' in n or 'skip_connection.weight' in n)]
+                        'attn1.to_' in n or 'attn2.to_' in n or 'in_layers.2.weight' in n or 'emb_layers.1.weight' in n or 'out_layers.3.weight' in n or 'skip_connection.weight' in n)]
                 empty_params = []
                 for n, p in self.model.named_parameters():
                     if not (
@@ -1184,21 +1380,20 @@ class MiraDDPM(DDPM):
             else:
                 params.append(self.logvar)
 
-        ## optimizer
-        # if self.enable_deepspeed:
-        #     if self.rec_loss:
-        #         params += list(self.first_stage_model.decoder.parameters())
-        #         mainlogger.info(f"@Training [{len(params)}] Full Paramters + VAE Decoder.")
-        #     optimizer = torch.optim.AdamW(params, lr=lr)
-        #     # from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
-        #     # optimizer = DeepSpeedCPUAdam(params, lr=lr)
-        #     # optimizer = FusedAdam(params, lr=lr)
-        # else:
-        #     optimizer = torch.optim.AdamW(params, lr=lr)
+        if self.rec_loss:
+            self.model.eval()
+            self.model.cpu()
+            self.cond_stage_model.cpu()
+            self.first_stage_model.cuda()
+            torch.cuda.empty_cache()
+            for p in self.model.parameters():
+                p.requires_grad = False
+            params = list(self.first_stage_model.decoder.parameters())
+            mainlogger.info(f"@Training [{len(params)}] Full Paramters + VAE.")
 
+        from deepspeed.ops.lamb import FusedLamb
 
-        optimizer = torch.optim.AdamW(params, lr=lr)
-
+        optimizer = FusedLamb(params, lr=lr)
 
         ## lr scheduler
         if self.use_scheduler:

@@ -1,0 +1,168 @@
+model:
+    linear_start: 0.00085
+    linear_end: 0.012
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: video
+    cond_stage_key: caption
+    cond_stage_trainable: False
+    conditioning_key: crossattn
+    image_size: [20, 32]
+    channels: 4
+    scale_by_std: false
+    scale_factor: 0.18215
+    # training related
+    use_ema: false
+    uncond_prob: 0. 
+    uncond_type: 'empty_seq'
+    fps_cond: true 
+    use_scale: True
+    scale_b: 0.3 
+    empty_params_only: false
+    temp_mask: false
+    scheduler_config:
+        target: utils.lr_scheduler.LambdaLRScheduler
+        interval: 'step'
+        frequency: 100
+        params:
+          start_step: 0
+          final_decay_ratio: 0.01
+          decay_steps: 20000
+    temporal_vae: true
+    spatial_mini_batch: 60 
+    spatial_mini_decode: 60 
+    bigbatch_encode: True
+
+
+    denoiser_config:
+      target: mira.modules.networks.miradit.MiraDiT
+      params:
+        temporal_length:  60
+        activation_fn: "gelu-approximate"
+        attention_bias: true
+        attention_head_dim: 72
+        attention_type: "default"
+        caption_channels: 4096
+        cross_attention_dim: 1152
+        double_self_attention: false
+        dropout: 0.0
+        in_channels: 4
+        norm_elementwise_affine: false
+        norm_eps: 1e-06
+        norm_num_groups: 32
+        norm_type: "ada_norm_single"
+        num_attention_heads: 16
+        num_embeds_ada_norm: 1000
+        num_layers: 28
+        num_vector_embeds: null
+        only_cross_attention: false
+        out_channels: 4
+        patch_size: 2
+        sample_size: 64
+        upcast_attention: false
+        use_linear_projection: false
+
+    first_stage_config:
+      target: mira.models.autoencoder_temporal.AutoencodingEngine
+      params:
+        loss_config:
+          target: torch.nn.Identity
+        regularizer_config:
+          target: mira.modules.regularizers.DiagonalGaussianRegularizer
+        encoder_config:
+          target: mira.modules.diffusionmodules.Encoder
+          params:
+            attn_type: vanilla
+            double_z: True
+            z_channels: 4
+            resolution: 256
+            in_channels: 3
+            out_ch: 3
+            ch: 128
+            ch_mult: [1, 2, 4, 4]
+            num_res_blocks: 2
+            attn_resolutions: []
+            dropout: 0.0
+        decoder_config:
+          target: mira.modules.temporal_ae.VideoDecoder
+          params:
+            attn_type: vanilla
+            double_z: True
+            z_channels: 4
+            resolution: 256
+            in_channels: 3
+            out_ch: 3
+            ch: 128
+            ch_mult: [1, 2, 4, 4]
+            num_res_blocks: 2
+            attn_resolutions: []
+            dropout: 0.0
+            video_kernel_size: [3, 1, 1]
+
+
+    cond_stage_config:
+      target: mira.modules.encoders.condition2.FrozenT5Embedder 
+      params:
+        freeze: true
+
+
+data:
+  target: utils_data.DataModuleFromConfig
+  params:
+    batch_size: 1
+    num_workers: 4
+    wrap: False
+    train:
+      target: mira.data.mira.Mira
+      params:
+        meta_path:   # path to miradata
+        dense_meta: # path to dense miradata metadata        
+        video_length: 60
+        frame_stride: 4
+        load_raw_resolution: True
+        resolution: [240,384]
+        spatial_transform: resize_center_crop
+        fps_cond: true
+        max_framestride:  4
+
+lightning:
+  precision: 32
+  strategy:
+    target: pytorch_lightning.strategies.DeepSpeedStrategy
+    params:
+      stage: 2
+      allgather_bucket_size: 2e7
+      contiguous_gradients: True
+      overlap_comm: True
+      reduce_bucket_size: 2e8
+
+  trainer:
+    benchmark: true
+    accumulate_grad_batches: 2
+    max_steps: 500000 
+    log_every_n_steps: 50
+    check_val_every_n_epoch: 0
+    gradient_clip_algorithm: 'norm'
+    gradient_clip_val: 0.5
+  callbacks:
+    model_checkpoint:
+      target: pytorch_lightning.callbacks.ModelCheckpoint
+      params:
+        every_n_train_steps: 1000
+        save_weights_only: false
+        filename: "{epoch}-{step}"
+    metrics_over_trainsteps_checkpoint:
+      target: pytorch_lightning.callbacks.ModelCheckpoint
+      params:
+        filename: '{epoch}-{step}'
+        save_weights_only: false
+        every_n_train_steps: 5000
+    batch_logger:
+      target: callbacks.ImageLogger
+      params:
+        batch_frequency: 300
+        to_local: true
+        max_images: 8
+        log_images_kwargs:
+          unconditional_guidance_scale: 12. 

@@ -659,7 +659,7 @@ class MiraDiT(ModelMixin, ConfigMixin):
             caption_channels: int = None,
             temporal_length: int = 16,
             pretrain: str = None,
-            text_spatial_cond: bool = True,
+            text_spatial_cond: bool = False,
             distillation_stages: int = 0,
             window_attn = None,
             fps_cond = True
@@ -1060,6 +1060,9 @@ class MiraDiT(ModelMixin, ConfigMixin):
             )
             output = rearrange(output, '(b f) c h w -> b c f h w', b=input_batch_size).contiguous()
 
+        if self.in_channels * 2 == self.out_channels:
+            output = output[:, :self.in_channels]
+            
         if not return_dict:
             if not self.distillation_stages:
                 return (output,)

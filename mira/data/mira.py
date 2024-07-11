@@ -8,7 +8,8 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import os
-
+from utils.utils import instantiate_from_config
+from itertools import cycle
 
 class Mira(Dataset):
 
@@ -26,14 +27,16 @@ class Mira(Dataset):
                  fixed_fps=None,
                  fps_cond=False,
                  max_framestride=8,
-                 Webvid_meta=None, webvid_prob=0.5,
-                 root=None
+                 Webvid_meta=None, webvid_prob=0.5,webvid_full=False,
+                 root=None,img_ds_config=None,iv_ratio=0.3, random_frame=False, random_frame_range=None
                  ):
         self.meta_path = meta_path
         self.webvid_data_dir = webvid_data_dir
         self.Webvid_meta = Webvid_meta
-
+        self.webvid_full = webvid_full
         self.subsample = subsample
+        self.random_frame = random_frame
+        self.random_frame_range= random_frame_range
         self.video_length = video_length
         self.webvid_prob = webvid_prob
         self.resolution = [resolution, resolution] if isinstance(resolution, int) else resolution
@@ -45,6 +48,12 @@ class Mira(Dataset):
         self.root = root
         self._load_metadata()
         self.max_framestride = max_framestride
+        self.iv_ratio = iv_ratio
+        if img_ds_config:
+            self.img_ds = instantiate_from_config(img_ds_config)
+        else:
+            self.img_ds = None
+
         if spatial_transform is not None:
             if spatial_transform == "random_crop":
                 self.spatial_transform = transforms.RandomCrop(crop_resolution)
@@ -92,18 +101,26 @@ class Mira(Dataset):
         ## get frames until success
         while True:
             if self.webvid_metadata is None or random.random() > self.webvid_prob:
-                if index % len(self) < len(self.metadata):
-                    index = index % len(self)
+                # len_s =  len(self.metadata)
+                index = index % len(self.metadata)
+                r = random.random()
+                if r<0.33:
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = sample['short_caption'] 
-
-                else index % len(self) < 2 * len(self.metadata):
-                    index = index % len(self) - len(self.metadata)
+                    caption = "{}. {}".format(sample['tag'] , sample['short_caption']).replace('nan', '')
+                elif r<0.66:
                     sample = self.metadata.iloc[index]
                     video_path, rel_fp = self._get_video_path(sample)
-                    caption = sample['dense_caption'] 
-
+                    caption = "{}. {}".format(sample['tag'], sample['dense_caption']).replace('nan', '')
+                else:
+                    sample = self.metadata.iloc[index]
+                    video_path, rel_fp = self._get_video_path(sample)
+                    caption = "Tag: {}. Short caption: {}. Dense caption: {}.  Main object: {}. Background: {}.  Style: {}. Camera: {}. ".format(
+                        sample['tag'],  sample['short_caption'], sample['dense_caption'],
+                        sample['main_object_caption'],
+                        sample['background_caption'],
+                        sample['style_caption'],
+                        sample['camera_caption']).replace('nan', '')
             else:
                 index = index % len(self.webvid_metadata)
                 sample = self.webvid_metadata.iloc[index]
@@ -175,16 +192,44 @@ class Mira(Dataset):
         fps_clip = fps_ori // frame_stride
         if self.fps_max is not None and fps_clip > self.fps_max:
             fps_clip = self.fps_max
+
+        random.seed(index)
+        if self.img_ds and random.random() < self.iv_ratio:
+            batch = self.img_ds[index]
+            caption = batch['caption']
+            image = batch['video']
+            data = {'video': image, 'caption': caption, 'path': video_path, 'fps': fps_clip, 'frame_stride': frame_stride}
+            return data
+
+        if self.random_frame:
+            frame_num = random.randint(1, self.video_length)
+            frame_num = self.video_length if random.random() > 0.3 else frame_num
+            temp_mask = torch.zeros([self.video_length], dtype=frames.dtype).to(frames.device)
+            temp_mask[:frame_num] = 1
+            if frame_num < self.video_length:
+                frames[:, frame_num:] = 0
+            data = {'video': frames, 'caption': caption, 'path': video_path, 'fps': fps_clip, 'frame_stride': frame_stride, 'temp_mask': temp_mask}
+            return data
+
+        elif self.random_frame_range is not None:
+            minf, maxf = self.random_frame_range
+            frame_num = random.randint(minf, maxf)
+            frame_num = self.video_length if random.random() > 0.3 else frame_num # 0.3 prob using original length
+            if frame_num < self.video_length:
+                frames = frames[:, :frame_num]
+            data = {'video': frames, 'caption': caption, 'path': video_path, 'fps': fps_clip, 'frame_stride': frame_stride}
+            return data
+
         data = {'video': frames, 'caption': caption, 'path': video_path, 'fps': fps_clip, 'frame_stride': frame_stride}
         return data
 
     def __len__(self):
-        return len(self.metadata) * 2  # short dense full
+        return len(self.webvid_metadata) if self.webvid_full else len(self.metadata)   # short dense full
 
 
 if __name__ == "__main__":
 
-    meta_path = "" # Mira data path
+    meta_path = ""
 
     dataset = Mira(meta_path,
                    subsample=None,

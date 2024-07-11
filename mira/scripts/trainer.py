@@ -181,6 +181,9 @@ if __name__ == "__main__":
 
         if trainer_kwargs['precision'] == 32:
             trainer.fit(model, data)
+        elif trainer_kwargs['precision'] == 'bf16':
+            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                trainer.fit(model, data)
         else:
-            with torch.cuda.amp.autocast():
+            with torch.cuda.amp.autocast(dtype=torch.float16):
                 trainer.fit(model, data)
