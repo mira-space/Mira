@@ -117,9 +117,9 @@ Please download the above checkponits in our [huggingface page (Mira-V0)](https:
 * Please note that some Mira-v1 models are larger in size because they were trained using FP32 precision to ensure training stability.
 
 
-### Finetuning the Mira-v0 model on 128x80 resolution.
+### Finetuning the Mira-v0 model on 768x480 resolution.
 
-* Add path to your datasets and the pretrain models in [config_384_mira.yaml](configs/Mira/config_384_mira.yaml).
+* Add path to your datasets and the pretrain models in [config_768v1_5s_mira.yaml](configs/Mira/config_768v1_5s_mira.yaml).
 * Then conduct the following commands:
 
 ```bash
@@ -128,12 +128,12 @@ conda activate mira
 
 
 ## Run training
-bash configs/Mira/run_128_mira.sh 0
+bash configs/Mira/run_768v1_mira.sh 0
 ```
 
 ### Finetuning the Mira-v0 model on 384x240 resolution.
 
-* Add path to your datasets and the pretrain models in [config_128_mira.yaml](configs/Mira/config_128_mira.yaml).
+* Add path to your datasets and the pretrain models in [config_384v1_10s_mira.yaml](configs/Mira/config_384v1_10s_mira.yaml).
 * Then conduct the following commands:
   
 ```bash
@@ -141,14 +141,14 @@ bash configs/Mira/run_128_mira.sh 0
 conda activate mira
 
 ## Run training
-bash configs/Mira/run_384_mira.sh 0
+bash configs/Mira/run_384v1_mira.sh 0
 ```
 
 ## Inference
 
-###  Evaluate the Mira-v0 model on 128x80 resolution.
+###  Evaluate the Mira-v1 model on 768x480 resolution.
 
-* Add path to your model checkponits in [run_text2video.sh](configs/inference/run_text2video.sh).
+* Add path to your model checkponits in [run_text2video_768.sh](configs/inference/run_text2video_768.sh).
 * Add your test prompts in [test_prompt.txt](prompts/test_prompt.txt).
 * Then conduct the following commands:
   
@@ -157,11 +157,11 @@ bash configs/Mira/run_384_mira.sh 0
 conda activate mira
 
 ## Run inference
-bash configs/inference/run_text2video.sh
+bash configs/inference/run_text2video_768.sh
 
 ```
 
-### Evaluate the Mira-v0 model on 384x240 resolution.
+### Evaluate the Mira-v1 model on 384x240 resolution.
 
 * Add path to your model checkponits in [run_text2video_384.sh](configs/inference/run_text2video_384.sh).
 * Add your test prompts in [test_prompt.txt](prompts/test_prompt.txt).
