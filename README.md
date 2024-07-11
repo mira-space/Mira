@@ -13,7 +13,8 @@
     
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://mira-space.github.io/)
 [![MiraData Page](https://img.shields.io/badge/MiraData-Page-blue)](https://github.com/mira-space/MiraData)
-
+[![arXiv](https://img.shields.io/badge/arXiv-Paper-b31b1b.svg)](https://arxiv.org/abs/2407.06358v1)
+[![Data Link](https://img.shields.io/badge/Data-Link-blue)](https://drive.google.com/drive/folders/1U9x6VeasgjxSuuKcCgY6K8CVy9EKEt80?usp=sharing)
 
 
 We introduce Mira (Mini-Sora), an initial foray into the realm of high-quality, long-duration video generation in the style of Sora. Mira stands out from existing text-to-video (T2V) generation frameworks in several key ways:
@@ -40,10 +41,14 @@ The Mira project is our endeavor to investigate and refine the entire data-model
 
 ## Results
 
+
+**5s 768x480**
+
+
+https://github.com/mira-space/Mira/assets/163223899/5e7d74d3-82a4-4a94-bfc1-9140b7929c50
+
+
 **10s 384×240**
-
-
-
 
 
 https://github.com/mira-space/Mira/assets/13939478/4de6aade-4eca-4291-bcc6-950c7b44c981
@@ -52,8 +57,6 @@ Each individual video can be downloaded from [here](https://drive.google.com/dri
 
 
 **20s 128×80**   
-
-
 
 
 https://github.com/mira-space/Mira/assets/13939478/9f274503-9715-4d2a-a262-10113c4df78f
@@ -68,6 +71,9 @@ https://github.com/mira-space/Mira/assets/13939478/9f274503-9715-4d2a-a262-10113
 ## 📰 Updates
 
 **Stay tuned!**  We are actively working on this project. Expect a steady stream of updates as we expand our dataset, enhance our annotation processes, and refine our model checkpoints. Keep an eye out for these upcoming updates, as we continue to make strides in our project's development.
+
+**[2024.07.11]** 🔥 We're glad to announce the release of **Mira-v1** and **MiraData-v1**! The full version of the [MiraData-v1 datasets](https://github.com/mira-space/MiraData) is now available, along with the corresponding technical report](https://arxiv.org/abs/2407.06358v1). Additionally, we have updated the MiraDiT model to improve quality, now supporting resolutions up to 768x480 and durations up to 10 seconds using the updated data. This version also includes an optional post-processing feature for video interpolation and enhancement, leveraging the RIFE](https://github.com/hzwer/ECCV2022-RIFE) framework.
+
 
 **[2024.04.01]** 🔥 We're delighted to announce the release of **Mira** and **MiraData-v0**. This  release offers a comprehensive open-source suite for data annotation and training pipelines, specifically tailored for the creation of long-duration videos with dynamic content and consistent quality. Our provided codes and checkpoints empower users to generate videos up to 20 seconds in 128x80 resolution and 10 seconds in 384x240 resolution. Dive into the future of video generation with Mira!
 
@@ -102,8 +108,14 @@ torchvision tqdm==4.65.0 transformers==4.25.1 moviepy av  tensorboardx \
 | ---- | ---- | ---- | ---- |
 | [128-v0.pt](https://huggingface.co/TencentARC/Mira-v0) | 1.1B | Webvid(pretrain) + MiraData-v0 | 128x80, 120 frames |
 | [384-v0.pt](https://huggingface.co/TencentARC/Mira-v0) | 1.1B | Webvid(pretrain) + MiraData-v0 | 384x240, 60 frames |
+| [384-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 384x240, 60 frames |
+| [384-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 384x240, 120 frames |
+| [768-v1-5s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 768x480, 30 frames |
+| [768-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) (Coming Soon) | 1.1B | Webvid(pretrain) + MiraData-v1 | 768x480, 60 frames |
 
-Please download the above checkponits in our [huggingface page](https://huggingface.co/TencentARC/Mira-v0). 
+Please download the above checkponits in our [huggingface page (Mira-V0)](https://huggingface.co/TencentARC/Mira-v0) and [huggingface page  (Mira-V0)](https://huggingface.co/TencentARC/Mira-v1). 
+* Please note that some Mira-v1 models are larger in size because they were trained using FP32 precision to ensure training stability.
+
 
 ### Finetuning the Mira-v0 model on 128x80 resolution.
 
@@ -164,23 +176,5 @@ bash configs/inference/run_text2video_384.sh
 
 ```
 
-## Current Limitations
-Mira-v0 represents our initial exploration into developing a Sora-like Text-to-Video (T2V) pipeline. Through this process, we have identified several areas for improvement in the current version:
-
-* **Enhanced motion dynamics and scene intricacy at the expense of generic object generation.** The Mira-v0 model, being fine-tuned on the potentially limited MiraData-v0, shows a reduced capability in generating a diverse range of objects compared to the WebVid-pretrained MiraDiT. However, it's worth noting that the Mira-v0 model has shown notable advancements in motion dynamics, scene detail, and three-dimensional consistency.
-
-| 10s 384x240 | 10s 384x240  |  10s 384x240| 
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|  [<img src="https://github.com/mira-space/Mira/assets/13939478/b7e16946-04ec-438d-8df8-8bf0da6200e1" width="300">](https://github.com/mira-space/Mira/assets/13939478/b7e16946-04ec-438d-8df8-8bf0da6200e1) |    [<img src="https://github.com/mira-space/Mira/assets/13939478/a654666b-1d0e-429b-83ae-97ae9516985a" width="300">](https://github.com/mira-space/Mira/assets/13939478/a654666b-1d0e-429b-83ae-97ae9516985a)|[<img src="https://github.com/mira-space/Mira/assets/13939478/8c314482-81fc-4d95-ab1b-b45a28bd3dee" width="300">](https://github.com/mira-space/Mira/assets/13939478/8c314482-81fc-4d95-ab1b-b45a28bd3dee) | 
-| A cute dog sniffing around the sandy coast. | A serene underwater scene featuring a sea turtle swimming through a coral reef. | A serene underwater scene featuring a sea turtle swimming through a coral reef. The turtle is with its greenish-brown shell. | 
-
-
-* **Architecture design**. The current ST-DiT-based model architecture lacks sophisticated spatial-temporal interactions
-  
-* **Reconstruction artifacts**. We are dedicated to further tune the video VAE to mitigate reconstruction artifacts.
-
-* **Sustained object consistency**. Due to resource limitations, our present MiraDiT employs distinct modules for spatial and temporal processing, which may affect the stability of object representation in longer, dynamic video sequences.
-  
-* At this stage, aspects such as image quality (resolution, clarity) and text alignment have not been our focus, but they remain important considerations for future updates.
 
 
