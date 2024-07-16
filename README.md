@@ -176,5 +176,9 @@ bash configs/inference/run_text2video_384.sh
 
 ```
 
+## Licence
+
+Mira is under the GPL-v3 Licence and is supported for commercial usage. If you need a commercial license for YOLO-World, please feel free to contact us.
+
 
 
