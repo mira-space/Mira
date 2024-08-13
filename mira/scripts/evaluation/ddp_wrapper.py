@@ -45,5 +45,4 @@ if __name__ == '__main__':
     rank, gpu_num = get_dist_info()
 
     print("@CoVideoGen Inference [rank%d]: %s"%(rank, now))
-    with torch.cuda.amp.autocast():
-        inference_api.run_inference(inference_args, rank, gpu_num)
+    inference_api.run_inference(inference_args, rank, gpu_num)
