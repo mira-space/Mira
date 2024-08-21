@@ -111,9 +111,17 @@ torchvision tqdm==4.65.0 transformers==4.25.1 moviepy av  tensorboardx \
 | [384-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 384x240, 60 frames |
 | [384-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 384x240, 120 frames |
 | [768-v1-5s.pt](https://huggingface.co/TencentARC/Mira-v1) | 1.1B | Webvid(pretrain) + MiraData-v1 | 768x480, 30 frames |
-| [768-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1) (Coming Soon) | 1.1B | Webvid(pretrain) + MiraData-v1 | 768x480, 60 frames |
+| [768-v1-10s.pt](https://huggingface.co/TencentARC/Mira-v1)  | 1.1B | Webvid(pretrain) + MiraData-v1 | 768x480, 60 frames |
 
-Please download the above checkponits in our [huggingface page (Mira-V0)](https://huggingface.co/TencentARC/Mira-v0) and [huggingface page  (Mira-V0)](https://huggingface.co/TencentARC/Mira-v1). 
+Please download the above checkponits in our [huggingface page (Mira-V0)](https://huggingface.co/TencentARC/Mira-v0) and [huggingface page  (Mira-V1)](https://huggingface.co/TencentARC/Mira-v1). 
+
+The model cab be automatically downloaded through the following two lines:
+
+```python
+from huggingface_hub import hf_hub_download
+photomaker_path = hf_hub_download(repo_id="TencentARC/Mira-v1", filename="768-v1-10s.pt", repo_type="model")
+```
+
 * Please note that some Mira-v1 models are larger in size because they were trained using FP32 precision to ensure training stability.
 
 
