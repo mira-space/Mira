@@ -1,10 +1,4 @@
 
-ckpt=/group/40005/zhaoyangzhang/768-v1-5s.pt
-
-export XDG_CACHE=/group/30098/share/zhaoyangzhang/PretrainedCache
-export TORCH_HOME=/group/30098/share/zhaoyangzhang/PretrainedCache
-export HF_HOME=/group/30098/share/zhaoyangzhang/PretrainedCache
-
 HOST_GPU_NUM=1
 HOST_NUM=1
 CHIEF_IP=127.0.0.1
